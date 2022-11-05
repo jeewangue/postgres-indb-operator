@@ -1,0 +1,85 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgdatabases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgdatabases/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgdatabases/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pghostcredentials
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pghostcredentials/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pghostcredentials/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers/status
+  verbs:
+  - get
+  - patch
+  - update

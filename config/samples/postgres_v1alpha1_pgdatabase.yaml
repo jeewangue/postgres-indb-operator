@@ -1,0 +1,6 @@
+apiVersion: postgres.jeewangue.com/v1alpha1
+kind: PgDatabase
+metadata:
+  name: pgdatabase-sample
+spec:
+  # TODO(user): Add fields here

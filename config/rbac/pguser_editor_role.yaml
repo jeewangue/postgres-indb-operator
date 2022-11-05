@@ -1,0 +1,24 @@
+# permissions for end users to edit pgusers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pguser-editor-role
+rules:
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers/status
+  verbs:
+  - get

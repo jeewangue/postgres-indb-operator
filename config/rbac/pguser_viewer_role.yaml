@@ -1,0 +1,20 @@
+# permissions for end users to view pgusers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pguser-viewer-role
+rules:
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - postgres.jeewangue.com
+  resources:
+  - pgusers/status
+  verbs:
+  - get

@@ -1,0 +1,46 @@
+domain: jeewangue.com
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: postgres-indb-operator
+repo: github.com/jeewangue/postgres-indb-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jeewangue.com
+  group: postgres
+  kind: PgRole
+  path: github.com/jeewangue/postgres-indb-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jeewangue.com
+  group: postgres
+  kind: PgDatabase
+  path: github.com/jeewangue/postgres-indb-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jeewangue.com
+  group: postgres
+  kind: PgUser
+  path: github.com/jeewangue/postgres-indb-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jeewangue.com
+  group: postgres
+  kind: PgHostCredential
+  path: github.com/jeewangue/postgres-indb-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"

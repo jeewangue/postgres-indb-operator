@@ -1,0 +1,7 @@
+apiVersion: postgres.jeewangue.com/v1alpha1
+kind: PgUser
+metadata:
+  name: pguser-sample
+spec:
+  name: sample
+  password: sample
