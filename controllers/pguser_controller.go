@@ -25,6 +25,7 @@ import (
 	"k8s.io/utils/strings/slices"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -70,6 +71,10 @@ func (r *PgUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *PgUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.PgUser{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1,
+			RateLimiter:             DefaultControllerRateLimiter(),
+		}).
 		Complete(r)
 }
 
