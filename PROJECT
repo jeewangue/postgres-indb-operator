@@ -13,15 +13,6 @@ resources:
   controller: true
   domain: jeewangue.com
   group: postgres
-  kind: PgRole
-  path: github.com/jeewangue/postgres-indb-operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: jeewangue.com
-  group: postgres
   kind: PgDatabase
   path: github.com/jeewangue/postgres-indb-operator/api/v1alpha1
   version: v1alpha1
