@@ -1,7 +1,23 @@
 apiVersion: postgres.jeewangue.com/v1alpha1
 kind: PgDatabase
 metadata:
-  name: pgdatabase-sample
+  name: test1
 spec:
   hostCredential: pghostcredential-sample
-  name: sample11
+  name: test1
+---
+apiVersion: postgres.jeewangue.com/v1alpha1
+kind: PgDatabase
+metadata:
+  name: test2
+spec:
+  hostCredential: pghostcredential-sample
+  name: test2
+---
+apiVersion: postgres.jeewangue.com/v1alpha1
+kind: PgDatabase
+metadata:
+  name: test3
+spec:
+  hostCredential: pghostcredential-sample2
+  name: test3

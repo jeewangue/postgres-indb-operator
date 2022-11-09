@@ -83,7 +83,7 @@ func (r *PgHostCredentialReconciler) reconcile(ctx context.Context, req reconcil
 				// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 				// Return and don't requeue
 				r.logger.Info("Object not found")
-				return nil
+				return ctlerrors.NewInvalid(err)
 			}
 			// Error reading the object - requeue the request.
 			return ctlerrors.NewTemporary(err)
@@ -143,5 +143,9 @@ func (r *PgHostCredentialReconciler) handleResult(err error) (ctrl.Result, error
 		r.logger.Error(err, "Failed to update the status")
 	}
 
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	if phase == api.PhaseInvalid {
+		return ctrl.Result{}, err
+	} else {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+	}
 }

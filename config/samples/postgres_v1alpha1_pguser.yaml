@@ -1,28 +1,37 @@
 apiVersion: postgres.jeewangue.com/v1alpha1
 kind: PgUser
 metadata:
-  name: pguser-sample
+  name: user1
 spec:
   name:
-    value: sample2
+    value: user1
   password:
-    value: sample
+    value: user1
   accessSpecs:
     - hostCredential: pghostcredential-sample
-      database: sample11
+      database: test1
+      permission: "readwrite"
+    - hostCredential: pghostcredential-sample
+      database: test2
       permission: "readwrite"
 ---
 apiVersion: postgres.jeewangue.com/v1alpha1
 kind: PgUser
 metadata:
-  name: pguser-sample2
+  name: user2
 spec:
   name:
-    value: sample3
+    value: user2
   password:
-    value: sample
+    value: user2
   accessSpecs:
     - hostCredential: pghostcredential-sample
-      database: sample11
+      database: test1
       permission: "readonly"
+    - hostCredential: pghostcredential-sample
+      database: test2
+      permission: "readonly"
+    - hostCredential: pghostcredential-sample2
+      database: test3
+      permission: "readwrite"
 
