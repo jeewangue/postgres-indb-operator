@@ -21,26 +21,26 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	api "github.com/jeewangue/postgres-indb-operator/api/v1alpha1"
+	apiutil "github.com/jeewangue/postgres-indb-operator/api/v1alpha1/util"
 	ctlerrors "github.com/jeewangue/postgres-indb-operator/internal/errors"
-	"github.com/jeewangue/postgres-indb-operator/internal/kube"
-	"github.com/jeewangue/postgres-indb-operator/internal/postgres"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	postgresv1alpha1 "github.com/jeewangue/postgres-indb-operator/api/v1alpha1"
 )
 
 // PgHostCredentialReconciler reconciles a PgHostCredential object
 type PgHostCredentialReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	logger   logr.Logger
+	hostCred *api.PgHostCredential
 }
 
 //+kubebuilder:rbac:groups=postgres.jeewangue.com,resources=pghostcredentials,verbs=get;list;watch;create;update;patch;delete
@@ -57,88 +57,91 @@ type PgHostCredentialReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *PgHostCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reqLogger := log.FromContext(ctx)
+	r.logger = setupLogger(ctx)
+	r.logger.Info("Reconciling PgHostCredential")
 
-	requestID, err := uuid.NewRandom()
-	if err != nil {
-		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
-	}
-	reqLogger = reqLogger.WithValues("requestId", requestID.String())
-	reqLogger.Info("Reconciling PgHostCredential")
-
-	status, err := r.reconcile(ctx, reqLogger, req)
-	if err != nil {
-		reqLogger.Error(err, "Failed to reconcile PgHostCredential object")
-	}
-	status.Persist(ctx, err)
-
-	reqLogger.Info("Result of reconcilation", "status", status, "err", err)
-	if status.IsRequeue() {
-		return ctrl.Result{Requeue: true}, err
-	} else {
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
-	}
+	result, err := r.handleResult(r.reconcile(ctx, req))
+	r.logger.Info("Finished reconciling PgHostCredential")
+	return result, err
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PgHostCredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&postgresv1alpha1.PgHostCredential{}).
+		For(&api.PgHostCredential{}).
 		Complete(r)
 }
 
-func (r *PgHostCredentialReconciler) reconcile(ctx context.Context, reqLogger logr.Logger, request reconcile.Request) (*Status, error) {
+func (r *PgHostCredentialReconciler) reconcile(ctx context.Context, req reconcile.Request) error {
 	// Fetch the PgHostCredential instance
 	cred := &api.PgHostCredential{}
-	err := r.Client.Get(ctx, request.NamespacedName, cred)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Info("Object not found")
-			return nil, nil
+	{
+		err := r.Client.Get(ctx, req.NamespacedName, cred)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				// Request object not found, could have been deleted after reconcile request.
+				// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+				// Return and don't requeue
+				r.logger.Info("Object not found")
+				return nil
+			}
+			// Error reading the object - requeue the request.
+			return ctlerrors.NewTemporary(err)
 		}
-		// Error reading the object - requeue the request.
-		return nil, err
+
+		r.hostCred = cred
 	}
 
 	// PgHostCredential instance created or updated
-	reqLogger = reqLogger.WithValues("hostCredential", cred.Name)
-	reqLogger.Info("Reconciling found PgHostCredential resource")
+	r.logger = r.logger.WithValues("hostCredential", cred.Name)
+	r.logger.Info("Reconciling found PgHostCredential resource")
 
-	status := NewStatus(reqLogger, r.Client, cred)
-
-	var host, user, password string
-	{
-		if host, err = kube.ResourceValue(r.Client, cred.Spec.Host, cred.Namespace); err != nil {
-			return status, ctlerrors.NewInvalid(err)
-		}
-		if user, err = kube.ResourceValue(r.Client, cred.Spec.User, cred.Namespace); err != nil {
-			return status, ctlerrors.NewInvalid(err)
-		}
-		if password, err = kube.ResourceValue(r.Client, cred.Spec.Password, cred.Namespace); err != nil {
-			return status, ctlerrors.NewInvalid(err)
-		}
-	}
-
-	connStr := postgres.ConnectionString{
-		Host:     host,
-		User:     user,
-		Password: password,
-		Database: "postgres",
-		Params:   cred.Spec.Params,
-	}
-
-	conn, err := pgx.Connect(context.Background(), connStr.Raw())
+	connStr, err := apiutil.GetConnectionString(cred, r.Client)
 	if err != nil {
-		return status, ctlerrors.NewTemporary(err)
+		return ctlerrors.NewInvalid(err)
+	}
+
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		return ctlerrors.NewTemporary(err)
 	}
 	defer conn.Close(ctx)
 
 	if err := conn.Ping(ctx); err != nil {
-		return status, ctlerrors.NewTemporary(err)
+		return ctlerrors.NewTemporary(err)
 	}
 
-	return status, nil
+	return nil
+}
+
+func (r *PgHostCredentialReconciler) handleResult(err error) (ctrl.Result, error) {
+	var phase api.Phase
+	var errorMessage string
+
+	switch {
+	case err == nil:
+		phase = api.PhaseAvailable
+		errorMessage = ""
+	case ctlerrors.IsTemporary(err):
+		phase = api.PhaseFailed
+		errorMessage = err.Error()
+	case ctlerrors.IsInvalid(err):
+		phase = api.PhaseInvalid
+		errorMessage = err.Error()
+	default:
+		phase = api.PhaseInvalid
+		errorMessage = err.Error()
+	}
+
+	if r.hostCred != nil {
+		r.hostCred.Status.Phase = phase
+		r.hostCred.Status.PhaseUpdated = metav1.Now()
+		r.hostCred.Status.Error = errorMessage
+	}
+
+	if err := r.Status().Update(context.Background(), r.hostCred); err != nil {
+		r.logger.Error(err, "Failed to update the status")
+	}
+
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 }

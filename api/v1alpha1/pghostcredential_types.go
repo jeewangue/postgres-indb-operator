@@ -56,16 +56,6 @@ type PgHostCredential struct {
 	Status Status               `json:"status,omitempty"`
 }
 
-func (u *PgHostCredential) GetStatus() Status {
-	return u.Status
-}
-
-func (u *PgHostCredential) SetStatus(s Status) {
-	u.Status.PhaseUpdated = s.PhaseUpdated
-	u.Status.Phase = s.Phase
-	u.Status.Error = s.Error
-}
-
 //+kubebuilder:object:root=true
 
 // PgHostCredentialList contains a list of PgHostCredential

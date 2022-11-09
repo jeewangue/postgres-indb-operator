@@ -3,4 +3,5 @@ kind: PgDatabase
 metadata:
   name: pgdatabase-sample
 spec:
-  # TODO(user): Add fields here
+  hostCredential: pghostcredential-sample
+  name: sample11

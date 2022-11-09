@@ -28,13 +28,8 @@ type PgDatabaseSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Host string `json:"host,omitempty"`
-	Name string `json:"name,omitempty"`
-}
-
-// PgDatabaseStatus defines the observed state of PgDatabase
-type PgDatabaseStatus struct {
-	Status `json:",inline"`
+	HostCredential string `json:"hostCredential"`
+	Name           string `json:"name"`
 }
 
 // +kubebuilder:object:root=true
@@ -48,8 +43,8 @@ type PgDatabase struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PgDatabaseSpec   `json:"spec,omitempty"`
-	Status PgDatabaseStatus `json:"status,omitempty"`
+	Spec   PgDatabaseSpec `json:"spec,omitempty"`
+	Status Status         `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true

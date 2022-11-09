@@ -18,8 +18,6 @@ package controllers
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,19 +25,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	postgresv1alpha1 "github.com/jeewangue/postgres-indb-operator/api/v1alpha1"
+	api "github.com/jeewangue/postgres-indb-operator/api/v1alpha1"
+	apiutil "github.com/jeewangue/postgres-indb-operator/api/v1alpha1/util"
+	ctlerrors "github.com/jeewangue/postgres-indb-operator/internal/errors"
+	"github.com/jeewangue/postgres-indb-operator/internal/postgres"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PgDatabaseReconciler reconciles a PgDatabase object
 type PgDatabaseReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	logger   logr.Logger
+	database *api.PgDatabase
 }
 
 //+kubebuilder:rbac:groups=postgres.jeewangue.com,resources=pgdatabases,verbs=get;list;watch;create;update;patch;delete
@@ -56,142 +58,158 @@ type PgDatabaseReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *PgDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reqLogger := log.FromContext(ctx)
+	r.logger = setupLogger(ctx)
+	r.logger.Info("Reconciling PgDatabase")
 
-	requestID, err := uuid.NewRandom()
-	if err != nil {
-		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
-	}
-	reqLogger = reqLogger.WithValues("requestId", requestID.String())
-	reqLogger.Info("Reconciling PgDatabase")
-
-	result, err := r.reconcile(ctx, reqLogger, req)
-	if err != nil {
-		reqLogger.Error(err, "Failed to reconcile PgDatabase object")
-	}
-
+	result, err := r.handleResult(r.reconcile(ctx, req))
+	r.logger.Info("Finished reconciling PgDatabase")
 	return result, err
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PgDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&postgresv1alpha1.PgDatabase{}).
+		For(&api.PgDatabase{}).
 		Complete(r)
 }
 
-func (r *PgDatabaseReconciler) reconcile(ctx context.Context, reqLogger logr.Logger, request reconcile.Request) (ctrl.Result, error) {
+func (r *PgDatabaseReconciler) reconcile(ctx context.Context, req reconcile.Request) error {
 	// Fetch the PgDatabase instance
-	database := &postgresv1alpha1.PgDatabase{}
-	err := r.Client.Get(ctx, request.NamespacedName, database)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Info("Object not found")
-			return ctrl.Result{}, nil
+	database := &api.PgDatabase{}
+	{
+		err := r.Client.Get(ctx, req.NamespacedName, database)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				// Request object not found, could have been deleted after reconcile request.
+				// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+				// Return and don't requeue
+				r.logger.Info("Object not found")
+				return nil
+			}
+			// Error reading the object - requeue the request.
+			return ctlerrors.NewTemporary(err)
 		}
-		// Error reading the object - requeue the request.
-		return ctrl.Result{}, err
+
+		r.database = database
 	}
 
 	// PgDatabase instance created or updated
-	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
-	reqLogger.Info("Reconciling found PgDatabase resource")
+	r.logger = r.logger.WithValues("database", database.Name)
+	r.logger.Info("Reconciling found PgDatabase resource")
 
 	if database.GetDeletionTimestamp() != nil {
 		if !slices.Contains(database.Finalizers, operatorFinalizer) {
-			return ctrl.Result{}, nil
+			return nil
 		}
 		// Run finalization logic. If the
 		// finalization logic fails, don't remove the finalizer so
 		// that we can retry during the next reconciliation.
-		if err := r.finalize(reqLogger, database); err != nil {
-			return ctrl.Result{}, err
+		if err := r.finalize(database); err != nil {
+			return err
 		}
 
 		// Remove finalizer. Once all finalizers have been
 		// removed, the object will be deleted.
 		controllerutil.RemoveFinalizer(database, operatorFinalizer)
-		err := r.Update(ctx, database)
-		if err != nil {
-			return ctrl.Result{}, err
+		if err := r.Update(ctx, database); err != nil {
+			return ctlerrors.NewTemporary(err)
 		}
 
-		return ctrl.Result{}, nil
+		return nil
 	}
 
 	// Add finalizer for this CR
 	if !slices.Contains(database.Finalizers, operatorFinalizer) {
 		controllerutil.AddFinalizer(database, operatorFinalizer)
 
-		err = r.Update(ctx, database)
+		if err := r.Update(ctx, database); err != nil {
+			return ctlerrors.NewTemporary(err)
+		}
+	}
+
+	// Connect to database
+	hostCred, err := apiutil.PgHostCredentialByName(r.Client, database.Namespace, database.Spec.HostCredential)
+	if err != nil {
+		r.logger.Error(err, "Failed to get host credential from the access spec. Skipping '"+database.Spec.HostCredential+"'")
+		return ctlerrors.NewTemporary(err)
+	}
+
+	{
+		connStr, err := apiutil.GetConnectionString(hostCred, r.Client)
 		if err != nil {
-			return ctrl.Result{}, err
+			r.logger.Error(err, "Failed to get connection string from the access spec. Skipping '"+database.Spec.HostCredential+"'")
+			return ctlerrors.NewTemporary(err)
 		}
-	}
 
-	// Connect to database
-	connStr := "postgresql://postgres:password@127.0.0.1:5432/postgres?sslmode=disable"
-	db, err := pgx.Connect(context.Background(), connStr)
-	// db, err := sql.Open("postgres", connStr)
-	defer db.Close(context.Background())
-	if err != nil {
-		reqLogger.Error(err, "Failed to open database connection")
-		return ctrl.Result{}, err
-	}
-
-	userExists := false
-	var usename string
-	var usesysid uint32
-	err = db.QueryRow(context.Background(), "SELECT usename, usesysid FROM pg_user WHERE usename = $1", database.Spec.Name).Scan(&usename, &usesysid)
-	switch {
-	case err == pgx.ErrNoRows:
-		userExists = false
-		reqLogger.Info(fmt.Sprintf("No user with name %s. Creating...", database.Spec.Name))
-	case err != nil:
-		reqLogger.Error(err, "Failed to query from pg_user")
-		return ctrl.Result{}, nil
-	default:
-		userExists = true
-		reqLogger.Info(fmt.Sprintf("Found user with name '%s' from pg_user", database.Spec.Name), "usename", usename, "usesysid", usesysid)
-	}
-
-	if !userExists {
-		if _, err := db.Exec(
-			context.Background(),
-			fmt.Sprintf("CREATE ROLE %s WITH "+
-				"LOGIN "+
-				"NOSUPERUSER "+
-				"NOCREATEDB "+
-				"NOCREATEROLE "+
-				"INHERIT "+
-				"NOREPLICATION "+
-				"CONNECTION LIMIT -1", database.Spec.Name)); err != nil {
-			reqLogger.Error(err, "Failed to create user")
-			return ctrl.Result{}, nil
+		db, err := postgres.NewClient(ctx, r.logger, connStr)
+		if err != nil {
+			r.logger.Error(err, "Failed to open database connection")
+			return ctlerrors.NewTemporary(err)
 		}
-		reqLogger.Info("Successfully created a user")
+
+		if err := db.EnsureDatabase(database.Spec.Name); err != nil {
+			return ctlerrors.NewTemporary(err)
+		}
+
 	}
 
-	return ctrl.Result{}, nil
-}
+	{
+		connStr, err := apiutil.GetConnectionStringWithDatabase(hostCred, r.Client, database.Spec.Name)
+		if err != nil {
+			r.logger.Error(err, "Failed to get connection string from the access spec. Skipping '"+database.Spec.HostCredential+"'")
+			return ctlerrors.NewTemporary(err)
+		}
 
-func (r *PgDatabaseReconciler) finalize(reqLogger logr.Logger, user *postgresv1alpha1.PgDatabase) error {
-	// Connect to database
-	connStr := "postgresql://postgres:password@127.0.0.1:5432/postgres?sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
-	defer db.Close()
-	if err != nil {
-		reqLogger.Error(err, "Failed to open database connection")
-	}
+		db, err := postgres.NewClient(ctx, r.logger, connStr)
+		if err != nil {
+			r.logger.Error(err, "Failed to open database connection")
+			return ctlerrors.NewTemporary(err)
+		}
 
-	row := db.QueryRow("select * from pg_roles where rolname=$1", user.Spec.Name)
-	if row.Err() != nil {
-		reqLogger.Error(row.Err(), "Failed to query pg_roles")
+		if err := db.EnsureDatabaseAccessRoles(database.Spec.Name); err != nil {
+			return ctlerrors.NewTemporary(err)
+		}
+
 	}
-	reqLogger.Info("Successfully finalized PgUser")
 
 	return nil
+}
+
+func (r *PgDatabaseReconciler) finalize(database *api.PgDatabase) error {
+	r.logger.Info("Successfully finalized PgDatabase")
+	return nil
+}
+
+func (r *PgDatabaseReconciler) handleResult(err error) (ctrl.Result, error) {
+	var phase api.Phase
+	var errorMessage string
+
+	switch {
+	case err == nil:
+		phase = api.PhaseAvailable
+		errorMessage = ""
+	case ctlerrors.IsTemporary(err):
+		phase = api.PhaseFailed
+		errorMessage = err.Error()
+	case ctlerrors.IsInvalid(err):
+		phase = api.PhaseInvalid
+		errorMessage = err.Error()
+	default:
+		phase = api.PhaseInvalid
+		errorMessage = err.Error()
+	}
+
+	if r.database != nil {
+		r.database.Status.Phase = phase
+		r.database.Status.PhaseUpdated = metav1.Now()
+		r.database.Status.Error = errorMessage
+	}
+
+	if err := r.Status().Update(context.Background(), r.database); err != nil {
+		r.logger.Error(err, "Failed to update the status")
+	}
+
+	isRequeue := (phase == api.PhaseFailed)
+
+	return ctrl.Result{Requeue: isRequeue}, err
 }

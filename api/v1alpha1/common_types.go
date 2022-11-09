@@ -35,6 +35,14 @@ type KeySelector struct {
 
 // Status defines the observed state of object.
 type Status struct {
+	// Represents the observations of a foo's current state.
+	// Known .status.conditions.type are: "Available", "Progressing", and "Degraded"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
 	PhaseUpdated metav1.Time `json:"phaseUpdated"`
 	Phase        Phase       `json:"phase"`
 	Error        string      `json:"error,omitempty"`

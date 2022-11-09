@@ -28,38 +28,33 @@ type PgUserSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Name string `json:"name"`
+	Name ResourceVar `json:"name"`
 	// +optional
-	Password *string `json:"password,omitempty"`
-	// +optional
-	// +listType=atomic
-	Read *[]ReadAccessSpec `json:"read,omitempty"`
+	Password ResourceVar `json:"password"`
 	// +optional
 	// +listType=atomic
-	Write *[]WriteAccessSpec `json:"write,omitempty"`
+	AccessSpecs *[]AccessSpec `json:"accessSpecs,omitempty"`
 }
 
-// ReadAccessSpec defines a read access request specification.
-type ReadAccessSpec struct {
-	Host ResourceVar `json:"host"`
-	// +optional
-	AllDatabases *bool `json:"allDatabases,omitempty"`
-	// +optional
-	Database ResourceVar `json:"database"`
+type Perm string
+
+const (
+	PermReadOnly  Perm = "readonly"
+	PermReadWrite Perm = "readwrite"
+)
+
+// AccessSpecs defines a access request specification.
+type AccessSpec struct {
+	// HostCredential is the name of the PgHostCredential
+	HostCredential string `json:"hostCredential"`
+	// Database is the name of the PgDatabase
+	Database string `json:"database"`
 	// +optional
 	Schema ResourceVar `json:"schema"`
-	Reason string      `json:"reason"`
 	// +optional
-	Start *metav1.Time `json:"start,omitempty"`
-	// +optional
-	Stop *metav1.Time `json:"stop,omitempty"`
-}
-
-// WriteAccessSpec defines a write access request specification.
-type WriteAccessSpec struct {
-	ReadAccessSpec `json:",inline"`
-	// +optional
-	Extended bool `json:"extended"`
+	Reason string `json:"reason"`
+	// Permission defines the access right to the database or schema
+	Permission Perm `json:"permission"`
 }
 
 // +kubebuilder:object:root=true
@@ -75,16 +70,6 @@ type PgUser struct {
 
 	Spec   PgUserSpec `json:"spec,omitempty"`
 	Status Status     `json:"status,omitempty"`
-}
-
-func (u *PgUser) GetStatus() Status {
-	return u.Status
-}
-
-func (u *PgUser) SetStatus(s Status) {
-	u.Status.PhaseUpdated = s.PhaseUpdated
-	u.Status.Phase = s.Phase
-	u.Status.Error = s.Error
 }
 
 //+kubebuilder:object:root=true
