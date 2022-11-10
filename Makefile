@@ -123,6 +123,11 @@ docker-build: test ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
+.PHONY: build-helm
+build-helm: generate manifests
+	mkdir -p helm
+	kustomize build config/default | awk '{f="helm/" NR "_manifest.yaml"; print $0 > f}' RS='\n---\n'
+
 ##@ Deployment
 
 ifndef ignore-not-found
