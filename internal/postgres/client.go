@@ -179,6 +179,13 @@ func (c *Client) EnsureUser(name, password string) error {
 	}
 	c.logger.Info("Successfully set password for the user")
 
+	// https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.MasterAccounts.html
+	if _, err := c.conn.Exec(c.ctx, grantRoleToUserQuery(name, c.conn.Config().User)); err != nil {
+		c.logger.Error(err, "Failed to grant user role to root")
+		return err
+	}
+	c.logger.Info("Successfully grant user role to root")
+
 	return nil
 }
 
