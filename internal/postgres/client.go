@@ -79,12 +79,12 @@ func (c *Client) EnsureDatabaseAccessRoles(name string) error {
 		c.logger.Error(err, "Failed to grant readonly privilege")
 		return err
 	}
-	if _, err := c.conn.Exec(c.ctx, grantUsageQuery(readonlyRole)); err != nil {
+	if _, err := c.conn.Exec(c.ctx, grantUsageOnPublicQuery(readonlyRole)); err != nil {
 		c.logger.Error(err, "Failed to grant readonly privilege")
 		return err
 	}
 	if _, err := c.conn.Exec(c.ctx, grantReadOnlyOnTablesQuery(readonlyRole)); err != nil {
-		c.logger.Error(err, "Failed to grant readonly privilege")
+		c.logger.Error(err, "Failed to grant readonly privilege on schema public")
 		return err
 	}
 	c.logger.Info("Successfully granted readonly privilege")
@@ -98,8 +98,12 @@ func (c *Client) EnsureDatabaseAccessRoles(name string) error {
 		c.logger.Error(err, "Failed to grant readwrite privilege")
 		return err
 	}
-	if _, err := c.conn.Exec(c.ctx, grantAllQuery(readwriteRole)); err != nil {
-		c.logger.Error(err, "Failed to grant readwrite privilege")
+	if _, err := c.conn.Exec(c.ctx, grantAllOnDatabase(readwriteRole, name)); err != nil {
+		c.logger.Error(err, "Failed to grant readwrite privilege on database")
+		return err
+	}
+	if _, err := c.conn.Exec(c.ctx, grantAllOnPublicQuery(readwriteRole)); err != nil {
+		c.logger.Error(err, "Failed to grant readwrite privilege on schema public")
 		return err
 	}
 	if _, err := c.conn.Exec(c.ctx, grantReadWriteOnTablesQuery(readwriteRole)); err != nil {

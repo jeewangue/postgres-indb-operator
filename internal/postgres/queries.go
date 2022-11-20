@@ -55,11 +55,15 @@ func grantReadWriteOnTablesQuery(role string) string {
 	return grantOnTablesQuery("SELECT, INSERT, UPDATE, DELETE", role)
 }
 
-func grantAllQuery(role string) string {
+func grantAllOnDatabase(role, dbName string) string {
+	return fmt.Sprintf("GRANT ALL ON DATABASE %s TO %s", dbName, role)
+}
+
+func grantAllOnPublicQuery(role string) string {
 	return fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", role)
 }
 
-func grantUsageQuery(role string) string {
+func grantUsageOnPublicQuery(role string) string {
 	return fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", role)
 }
 
