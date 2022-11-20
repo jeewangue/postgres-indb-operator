@@ -14,7 +14,6 @@ configMapGenerator:
 
 commonLabels:
   app.kubernetes.io/component: controller
-  app.kubernetes.io/version: v0.0.1
 
 images:
 - name: controller
